@@ -1,19 +1,19 @@
+import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { Icon, LatLngExpression } from "leaflet";
 import { Calendar, MapPin, Heart, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Fix for default marker icons
-import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
-import markerIcon from "leaflet/dist/images/marker-icon.png";
-import markerShadow from "leaflet/dist/images/marker-shadow.png";
-
-delete (Icon.Default.prototype as any)._getIconUrl;
-Icon.Default.mergeOptions({
-  iconUrl: markerIcon,
-  iconRetinaUrl: markerIcon2x,
-  shadowUrl: markerShadow,
+// Fix for default marker icons in production
+const icon = L.icon({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
 });
 
 interface Event {
@@ -38,18 +38,44 @@ interface EventMapProps {
 }
 
 const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }: EventMapProps) => {
-  const defaultCenter: LatLngExpression = [40.7589, -73.9851];
+  const defaultCenter: [number, number] = [40.7589, -73.9851];
+
+  useEffect(() => {
+    // Ensure Leaflet is properly initialized
+    delete (L.Icon.Default.prototype as any)._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    });
+  }, []);
 
   return (
     <MapContainer
-      {...{ center: defaultCenter, zoom: 12, scrollWheelZoom: true } as any}
-      style={{ height: "100%", width: "100%" }}
+      {...{ 
+        center: defaultCenter, 
+        zoom: 12, 
+        scrollWheelZoom: true,
+        style: { height: "100%", width: "100%", zIndex: 0 },
+        className: "rounded-xl"
+      } as any}
     >
-      <TileLayer {...{ url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" } as any} />
+      <TileLayer 
+        {...{ 
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        } as any} 
+      />
       
       {events.map((event) => (
-        <Marker key={event.id} {...{ position: [event.lat, event.lng] } as any}>
-          <Popup>
+        <Marker 
+          key={event.id} 
+          {...{ 
+            position: [event.lat, event.lng],
+            icon: icon
+          } as any}
+        >
+          <Popup {...{ maxWidth: 300 } as any}>
             <div className="p-2">
               <img src={event.image} alt={event.title} className="w-full h-32 object-cover rounded-lg mb-3" />
               <h3 className="font-bold text-lg mb-2">{event.title}</h3>
