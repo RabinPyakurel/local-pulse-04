@@ -31,6 +31,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const routeLayerRef = useRef<L.Polyline | null>(null);
 
   useEffect(() => {
     // Get user's current location
@@ -96,6 +97,53 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       popupContainer.className = "p-2";
       popupContainer.style.minWidth = "280px";
 
+      const handleGetDirections = async () => {
+        if (!userLocation) {
+          alert("Please enable location services to get directions");
+          return;
+        }
+
+        // Clear previous route
+        if (routeLayerRef.current) {
+          map.removeLayer(routeLayerRef.current);
+        }
+
+        try {
+          // Using OpenRouteService API (free, open-source)
+          const response = await fetch(
+            `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248a11f38c2d4bc4df5b10b5f24b96eaf52&start=${userLocation[1]},${userLocation[0]}&end=${event.lng},${event.lat}`
+          );
+          const data = await response.json();
+          
+          if (data.features && data.features[0]) {
+            const coordinates = data.features[0].geometry.coordinates;
+            const latLngs = coordinates.map((coord: number[]) => [coord[1], coord[0]] as L.LatLngExpression);
+            
+            // Draw route on map
+            routeLayerRef.current = L.polyline(latLngs, {
+              color: '#6366f1',
+              weight: 4,
+              opacity: 0.8,
+            }).addTo(map);
+
+            // Fit map to show entire route
+            map.fitBounds(routeLayerRef.current.getBounds(), { padding: [50, 50] });
+
+            // Show distance and duration
+            const distance = (data.features[0].properties.segments[0].distance / 1000).toFixed(1);
+            const duration = Math.round(data.features[0].properties.segments[0].duration / 60);
+            
+            L.popup()
+              .setLatLng([event.lat, event.lng])
+              .setContent(`<b>Route Details</b><br/>Distance: ${distance} km<br/>Duration: ${duration} mins`)
+              .openOn(map);
+          }
+        } catch (error) {
+          console.error("Error getting directions:", error);
+          alert("Unable to get directions. Please try again.");
+        }
+      };
+
       const PopupContent = () => (
         <>
           <img 
@@ -115,7 +163,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
             </div>
           </div>
           <p className="text-sm mb-3 line-clamp-2">{event.description}</p>
-          <div className="flex gap-2">
+          <div className="flex gap-2 mb-2">
             <Button
               variant={userInterests[event.id] === "interested" ? "default" : "outline"}
               size="sm"
@@ -139,6 +187,17 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
               Attended
             </Button>
           </div>
+          {userLocation && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleGetDirections}
+              className="w-full gap-2"
+            >
+              <MapPin className="h-3 w-3" />
+              Get Directions
+            </Button>
+          )}
         </>
       );
 
@@ -158,6 +217,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
     <div className="relative h-full w-full">
       <div className="absolute top-4 left-4 z-[1000] w-80">
         <LocationSearch
+          userLocation={userLocation}
           onLocationSelect={(location) => {
             if (mapRef.current) {
               mapRef.current.setView([location.lat, location.lng], 14);

@@ -14,15 +14,29 @@ interface LocationSearchProps {
   onLocationSelect: (location: { name: string; lat: number; lng: number }) => void;
   placeholder?: string;
   className?: string;
+  userLocation?: [number, number] | null;
 }
 
-const LocationSearch = ({ onLocationSelect, placeholder = "Search location...", className }: LocationSearchProps) => {
+const LocationSearch = ({ onLocationSelect, placeholder = "Search location...", className, userLocation }: LocationSearchProps) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LocationResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const debounceTimer = useRef<NodeJS.Timeout>();
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Calculate distance between two points
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -48,11 +62,34 @@ const LocationSearch = ({ onLocationSelect, placeholder = "Search location...", 
     debounceTimer.current = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`
-        );
+        // Build search URL with user location if available for better results
+        let searchUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=10`;
+        
+        if (userLocation) {
+          searchUrl += `&viewbox=${userLocation[1]-0.5},${userLocation[0]+0.5},${userLocation[1]+0.5},${userLocation[0]-0.5}&bounded=0`;
+        }
+        
+        const response = await fetch(searchUrl);
         const data = await response.json();
-        setResults(data);
+        
+        // Sort results by distance if user location is available
+        let sortedData = data;
+        if (userLocation && data.length > 0) {
+          sortedData = data
+            .map((result: LocationResult) => ({
+              ...result,
+              distance: calculateDistance(
+                userLocation[0],
+                userLocation[1],
+                parseFloat(result.lat),
+                parseFloat(result.lon)
+              )
+            }))
+            .sort((a: any, b: any) => a.distance - b.distance)
+            .slice(0, 5);
+        }
+        
+        setResults(sortedData);
         setShowResults(true);
       } catch (error) {
         console.error("Error searching location:", error);
@@ -94,7 +131,7 @@ const LocationSearch = ({ onLocationSelect, placeholder = "Search location...", 
 
       {showResults && results.length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {results.map((result) => (
+          {results.map((result: any) => (
             <button
               key={result.place_id}
               type="button"
@@ -102,7 +139,16 @@ const LocationSearch = ({ onLocationSelect, placeholder = "Search location...", 
               className="w-full px-4 py-3 text-left hover:bg-muted transition-colors flex items-start gap-2 border-b last:border-b-0"
             >
               <MapPin className="h-4 w-4 mt-1 text-primary flex-shrink-0" />
-              <span className="text-sm">{result.display_name}</span>
+              <div className="flex-1">
+                <span className="text-sm block">{result.display_name}</span>
+                {result.distance && (
+                  <span className="text-xs text-muted-foreground">
+                    {result.distance < 1 
+                      ? `${(result.distance * 1000).toFixed(0)}m away`
+                      : `${result.distance.toFixed(1)}km away`}
+                  </span>
+                )}
+              </div>
             </button>
           ))}
         </div>
