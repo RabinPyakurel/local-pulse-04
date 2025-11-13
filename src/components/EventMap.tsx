@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Calendar, MapPin, Heart, Check } from "lucide-react";
@@ -29,12 +29,32 @@ interface EventMapProps {
 const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }: EventMapProps) => {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    // Get user's current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation([position.coords.latitude, position.coords.longitude]);
+        },
+        (error) => {
+          console.log("Geolocation error:", error);
+          // Fallback to default location (New York)
+          setUserLocation([40.7589, -73.9851]);
+        }
+      );
+    } else {
+      // Fallback to default location
+      setUserLocation([40.7589, -73.9851]);
+    }
+  }, []);
 
-    // Initialize map
-    const map = L.map(containerRef.current).setView([40.7589, -73.9851], 12);
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current || !userLocation) return;
+
+    // Initialize map with user's location
+    const map = L.map(containerRef.current).setView(userLocation, 12);
     mapRef.current = map;
 
     // Add tile layer (OpenStreetMap)
@@ -43,7 +63,19 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       maxZoom: 19,
     }).addTo(map);
 
-    // Custom icon
+    // Add user location marker
+    const userIcon = L.divIcon({
+      className: 'user-location-marker',
+      html: '<div style="background: #6366f1; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);"></div>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
+    });
+
+    L.marker(userLocation, { icon: userIcon })
+      .addTo(map)
+      .bindPopup("<b>Your Location</b>");
+
+    // Custom icon for events
     const customIcon = L.icon({
       iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
       iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -119,7 +151,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       map.remove();
       mapRef.current = null;
     };
-  }, [events, userInterests, onInterestToggle, onAttendedToggle]);
+  }, [userLocation, events, userInterests, onInterestToggle, onAttendedToggle]);
 
   return (
     <div 
