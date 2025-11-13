@@ -1,19 +1,9 @@
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { Calendar, MapPin, Heart, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-
-// Fix for default marker icons
-const customIcon = new L.Icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41]
-});
+import { Calendar, MapPin, Heart, Check } from "lucide-react";
+import { createRoot } from "react-dom/client";
+import { Button } from "@/components/ui/button";
 
 interface Event {
   id: number;
@@ -37,72 +27,106 @@ interface EventMapProps {
 }
 
 const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }: EventMapProps) => {
-  const center: L.LatLngExpression = [40.7589, -73.9851];
-  
-  return (
-    <div style={{ height: "100%", width: "100%" }}>
-      <MapContainer
-        center={center}
-        zoom={12}
-        scrollWheelZoom={true}
-        style={{ height: "100%", width: "100%" }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        
-        {events.map((event) => {
-          const position: L.LatLngExpression = [event.lat, event.lng];
-          
-          return (
-            <Marker 
-              key={event.id}
-              position={position}
-              icon={customIcon}
+  const mapRef = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    // Initialize map
+    const map = L.map(containerRef.current).setView([40.7589, -73.9851], 12);
+    mapRef.current = map;
+
+    // Add tile layer (OpenStreetMap)
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Custom icon
+    const customIcon = L.icon({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+    });
+
+    // Add markers for each event
+    events.forEach((event) => {
+      const marker = L.marker([event.lat, event.lng], { icon: customIcon }).addTo(map);
+
+      // Create popup content
+      const popupContainer = document.createElement("div");
+      popupContainer.className = "p-2";
+      popupContainer.style.minWidth = "280px";
+
+      const PopupContent = () => (
+        <>
+          <img 
+            src={event.image} 
+            alt={event.title} 
+            className="w-full h-32 object-cover rounded-lg mb-3" 
+          />
+          <h3 className="font-bold text-lg mb-2">{event.title}</h3>
+          <div className="space-y-2 mb-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="h-4 w-4" />
+              <span>{new Date(event.date).toLocaleDateString()} at {event.time}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4" />
+              <span>{event.location}</span>
+            </div>
+          </div>
+          <p className="text-sm mb-3 line-clamp-2">{event.description}</p>
+          <div className="flex gap-2">
+            <Button
+              variant={userInterests[event.id] === "interested" ? "default" : "outline"}
+              size="sm"
+              onClick={() => onInterestToggle(event.id)}
+              className="flex-1 gap-1"
             >
-              <Popup maxWidth={300}>
-                <div className="p-2">
-                  <img src={event.image} alt={event.title} className="w-full h-32 object-cover rounded-lg mb-3" />
-                  <h3 className="font-bold text-lg mb-2">{event.title}</h3>
-                  <div className="space-y-2 mb-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="h-4 w-4" />
-                      <span>{new Date(event.date).toLocaleDateString()} at {event.time}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="h-4 w-4" />
-                      <span>{event.location}</span>
-                    </div>
-                  </div>
-                  <p className="text-sm mb-3 line-clamp-2">{event.description}</p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant={userInterests[event.id] === "interested" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => onInterestToggle(event.id)}
-                      className="flex-1 gap-1"
-                    >
-                      <Heart className={`h-3 w-3 ${userInterests[event.id] === "interested" ? "fill-current" : ""}`} />
-                      Interested
-                    </Button>
-                    <Button
-                      variant={userInterests[event.id] === "attended" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => onAttendedToggle(event.id)}
-                      className="flex-1 gap-1"
-                    >
-                      <Check className="h-3 w-3" />
-                      Attended
-                    </Button>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
-      </MapContainer>
-    </div>
+              <Heart 
+                className={`h-3 w-3 ${
+                  userInterests[event.id] === "interested" ? "fill-current" : ""
+                }`} 
+              />
+              Interested
+            </Button>
+            <Button
+              variant={userInterests[event.id] === "attended" ? "default" : "outline"}
+              size="sm"
+              onClick={() => onAttendedToggle(event.id)}
+              className="flex-1 gap-1"
+            >
+              <Check className="h-3 w-3" />
+              Attended
+            </Button>
+          </div>
+        </>
+      );
+
+      const root = createRoot(popupContainer);
+      root.render(<PopupContent />);
+
+      marker.bindPopup(popupContainer, { maxWidth: 300 });
+    });
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [events, userInterests, onInterestToggle, onAttendedToggle]);
+
+  return (
+    <div 
+      ref={containerRef} 
+      style={{ height: "100%", width: "100%" }}
+      className="rounded-xl overflow-hidden"
+    />
   );
 };
 
