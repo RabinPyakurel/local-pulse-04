@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import { Calendar, MapPin, Heart, Check } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { Button } from "@/components/ui/button";
+import LocationSearch from "./LocationSearch";
 
 interface Event {
   id: number;
@@ -154,11 +155,38 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
   }, [userLocation, events, userInterests, onInterestToggle, onAttendedToggle]);
 
   return (
-    <div 
-      ref={containerRef} 
-      style={{ height: "100%", width: "100%" }}
-      className="rounded-xl overflow-hidden"
-    />
+    <div className="relative h-full w-full">
+      <div className="absolute top-4 left-4 z-[1000] w-80">
+        <LocationSearch
+          onLocationSelect={(location) => {
+            if (mapRef.current) {
+              mapRef.current.setView([location.lat, location.lng], 14);
+              
+              // Add temporary marker
+              const tempIcon = L.divIcon({
+                className: 'temp-location-marker',
+                html: '<div style="background: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);"></div>',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10],
+              });
+              
+              L.marker([location.lat, location.lng], { icon: tempIcon })
+                .addTo(mapRef.current)
+                .bindPopup(`<b>${location.name}</b>`)
+                .openPopup();
+            }
+          }}
+          placeholder="Search location on map..."
+          className="shadow-lg"
+        />
+      </div>
+      
+      <div 
+        ref={containerRef} 
+        style={{ height: "100%", width: "100%" }}
+        className="rounded-xl overflow-hidden"
+      />
+    </div>
   );
 };
 

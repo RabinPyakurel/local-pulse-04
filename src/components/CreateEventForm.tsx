@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import LocationSearch from "./LocationSearch";
+import { MapPin } from "lucide-react";
 
 interface CreateEventFormProps {
   onSuccess: () => void;
@@ -93,42 +95,28 @@ const CreateEventForm = ({ onSuccess }: CreateEventFormProps) => {
 
       <div className="space-y-2">
         <Label htmlFor="location">Location *</Label>
-        <Input
-          id="location"
-          name="location"
-          value={formData.location}
-          onChange={handleChange}
-          placeholder="Central Park, New York"
-          required
+        <LocationSearch
+          onLocationSelect={(location) => {
+            setFormData({
+              ...formData,
+              location: location.name,
+              lat: location.lat.toString(),
+              lng: location.lng.toString(),
+            });
+          }}
+          placeholder="Search for location..."
         />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="lat">Latitude</Label>
-          <Input
-            id="lat"
-            name="lat"
-            type="number"
-            step="any"
-            value={formData.lat}
-            onChange={handleChange}
-            placeholder="40.785091"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="lng">Longitude</Label>
-          <Input
-            id="lng"
-            name="lng"
-            type="number"
-            step="any"
-            value={formData.lng}
-            onChange={handleChange}
-            placeholder="-73.968285"
-          />
-        </div>
+        {formData.location && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+            <MapPin className="h-4 w-4" />
+            <span>{formData.location}</span>
+          </div>
+        )}
+        {formData.lat && formData.lng && (
+          <div className="text-xs text-muted-foreground">
+            Coordinates: {parseFloat(formData.lat).toFixed(6)}, {parseFloat(formData.lng).toFixed(6)}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
