@@ -32,6 +32,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
   const containerRef = useRef<HTMLDivElement>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const routeLayerRef = useRef<L.Polyline | null>(null);
+  const markersRef = useRef<L.Marker[]>([]);
 
   useEffect(() => {
     // Get user's current location
@@ -77,20 +78,44 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       .addTo(map)
       .bindPopup("<b>Your Location</b>");
 
-    // Custom icon for events
-    const customIcon = L.icon({
-      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      iconSize: [25, 41],
-      iconAnchor: [12, 41],
-      popupAnchor: [1, -34],
-      shadowSize: [41, 41],
+    // Custom icon for events - Red marker for better visibility
+    const customIcon = L.divIcon({
+      className: 'event-marker',
+      html: `
+        <div style="position: relative;">
+          <div style="
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            width: 32px;
+            height: 32px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 3px solid white;
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+          "></div>
+          <div style="
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            background: white;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+          "></div>
+        </div>
+      `,
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32],
     });
+
+    // Clear previous markers
+    markersRef.current.forEach(marker => map.removeLayer(marker));
+    markersRef.current = [];
 
     // Add markers for each event
     events.forEach((event) => {
       const marker = L.marker([event.lat, event.lng], { icon: customIcon }).addTo(map);
+      markersRef.current.push(marker);
 
       // Create popup content
       const popupContainer = document.createElement("div");
@@ -207,36 +232,112 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       marker.bindPopup(popupContainer, { maxWidth: 300 });
     });
 
+    // Fit map to show all event markers and user location
+    if (events.length > 0) {
+      const bounds = L.latLngBounds([
+        userLocation,
+        ...events.map(event => [event.lat, event.lng] as L.LatLngExpression)
+      ]);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
+    }
+
     return () => {
       map.remove();
       mapRef.current = null;
     };
   }, [userLocation, events, userInterests, onInterestToggle, onAttendedToggle]);
 
+  const handleLocationSearch = async (location: { name: string; lat: number; lng: number }) => {
+    if (!mapRef.current || !userLocation) return;
+
+    // Clear previous route
+    if (routeLayerRef.current) {
+      mapRef.current.removeLayer(routeLayerRef.current);
+    }
+
+    // Pan to location
+    mapRef.current.setView([location.lat, location.lng], 14);
+    
+    // Add temporary marker
+    const tempIcon = L.divIcon({
+      className: 'temp-location-marker',
+      html: `
+        <div style="
+          background: linear-gradient(135deg, #10b981, #059669);
+          width: 28px;
+          height: 28px;
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          border: 3px solid white;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
+        ">
+          <div style="
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: white;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transform: rotate(45deg);
+          "></div>
+        </div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 28],
+    });
+    
+    const tempMarker = L.marker([location.lat, location.lng], { icon: tempIcon })
+      .addTo(mapRef.current)
+      .bindPopup(`<b>${location.name}</b><br/><small>Click 'Get Directions' below</small>`)
+      .openPopup();
+
+    // Fetch and draw route from user location to searched location
+    try {
+      const response = await fetch(
+        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248a11f38c2d4bc4df5b10b5f24b96eaf52&start=${userLocation[1]},${userLocation[0]}&end=${location.lng},${location.lat}`
+      );
+      const data = await response.json();
+      
+      if (data.features && data.features[0]) {
+        const coordinates = data.features[0].geometry.coordinates;
+        const latLngs = coordinates.map((coord: number[]) => [coord[1], coord[0]] as L.LatLngExpression);
+        
+        // Draw route on map
+        routeLayerRef.current = L.polyline(latLngs, {
+          color: '#10b981',
+          weight: 5,
+          opacity: 0.7,
+          dashArray: '10, 10',
+        }).addTo(mapRef.current);
+
+        // Fit map to show entire route
+        mapRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [50, 50] });
+
+        // Show distance and duration in popup
+        const distance = (data.features[0].properties.segments[0].distance / 1000).toFixed(1);
+        const duration = Math.round(data.features[0].properties.segments[0].duration / 60);
+        
+        tempMarker.setPopupContent(
+          `<b>${location.name}</b><br/>
+          <div style="margin-top: 8px; padding: 8px; background: #f0fdf4; border-radius: 4px;">
+            <div><strong>Distance:</strong> ${distance} km</div>
+            <div><strong>Duration:</strong> ${duration} mins</div>
+          </div>`
+        );
+      }
+    } catch (error) {
+      console.error("Error getting directions:", error);
+    }
+  };
+
   return (
     <div className="relative h-full w-full">
       <div className="absolute top-4 left-4 z-[1000] w-80">
         <LocationSearch
           userLocation={userLocation}
-          onLocationSelect={(location) => {
-            if (mapRef.current) {
-              mapRef.current.setView([location.lat, location.lng], 14);
-              
-              // Add temporary marker
-              const tempIcon = L.divIcon({
-                className: 'temp-location-marker',
-                html: '<div style="background: #10b981; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);"></div>',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10],
-              });
-              
-              L.marker([location.lat, location.lng], { icon: tempIcon })
-                .addTo(mapRef.current)
-                .bindPopup(`<b>${location.name}</b>`)
-                .openPopup();
-            }
-          }}
-          placeholder="Search location on map..."
+          onLocationSelect={handleLocationSearch}
+          placeholder="Search location & get directions..."
           className="shadow-lg"
         />
       </div>
