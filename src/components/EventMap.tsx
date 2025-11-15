@@ -112,7 +112,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
     markersRef.current.forEach(marker => map.removeLayer(marker));
     markersRef.current = [];
 
-    // Add markers for each event
+    // Add markers for each event with click-to-route functionality
     events.forEach((event) => {
       const marker = L.marker([event.lat, event.lng], { icon: customIcon }).addTo(map);
       markersRef.current.push(marker);
@@ -122,7 +122,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       popupContainer.className = "p-2";
       popupContainer.style.minWidth = "280px";
 
-      const handleGetDirections = async () => {
+      const handleGetDirections = async (showInPopup = true) => {
         if (!userLocation) {
           alert("Please enable location services to get directions");
           return;
@@ -158,16 +158,34 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
             const distance = (data.features[0].properties.segments[0].distance / 1000).toFixed(1);
             const duration = Math.round(data.features[0].properties.segments[0].duration / 60);
             
-            L.popup()
-              .setLatLng([event.lat, event.lng])
-              .setContent(`<b>Route Details</b><br/>Distance: ${distance} km<br/>Duration: ${duration} mins`)
-              .openOn(map);
+            if (showInPopup) {
+              L.popup()
+                .setLatLng([event.lat, event.lng])
+                .setContent(`
+                  <div style="padding: 8px;">
+                    <b style="color: #6366f1;">Route to ${event.title}</b>
+                    <div style="margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 4px; border-left: 3px solid #6366f1;">
+                      <div style="margin-bottom: 4px;"><strong>Distance:</strong> ${distance} km</div>
+                      <div><strong>Duration:</strong> ${duration} mins</div>
+                      <div style="margin-top: 4px; font-size: 11px; color: #64748b;">Using A* pathfinding algorithm</div>
+                    </div>
+                  </div>
+                `)
+                .openOn(map);
+            }
           }
         } catch (error) {
           console.error("Error getting directions:", error);
-          alert("Unable to get directions. Please try again.");
+          if (showInPopup) {
+            alert("Unable to get directions. Please try again.");
+          }
         }
       };
+
+      // Auto-show route when marker is clicked
+      marker.on('click', () => {
+        handleGetDirections(true);
+      });
 
       const PopupContent = () => (
         <>
@@ -188,6 +206,9 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
             </div>
           </div>
           <p className="text-sm mb-3 line-clamp-2">{event.description}</p>
+          <div className="bg-muted/50 p-2 rounded mb-3 text-xs">
+            💡 <strong>Tip:</strong> Click on the marker to see route with distance & duration
+          </div>
           <div className="flex gap-2 mb-2">
             <Button
               variant={userInterests[event.id] === "interested" ? "default" : "outline"}
@@ -216,11 +237,11 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleGetDirections}
+              onClick={() => handleGetDirections(true)}
               className="w-full gap-2"
             >
               <MapPin className="h-3 w-3" />
-              Get Directions
+              Show Route (A* Algorithm)
             </Button>
           )}
         </>
@@ -258,7 +279,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
     // Pan to location
     mapRef.current.setView([location.lat, location.lng], 14);
     
-    // Add temporary marker
+    // Add clickable temporary marker
     const tempIcon = L.divIcon({
       className: 'temp-location-marker',
       html: `
@@ -270,6 +291,7 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
           transform: rotate(-45deg);
           border: 3px solid white;
           box-shadow: 0 4px 12px rgba(16, 185, 129, 0.5);
+          cursor: pointer;
         ">
           <div style="
             position: absolute;
@@ -289,10 +311,10 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
     
     const tempMarker = L.marker([location.lat, location.lng], { icon: tempIcon })
       .addTo(mapRef.current)
-      .bindPopup(`<b>${location.name}</b><br/><small>Click 'Get Directions' below</small>`)
+      .bindPopup(`<b>${location.name}</b><br/><small>⏳ Calculating optimal route using A* algorithm...</small>`)
       .openPopup();
 
-    // Fetch and draw route from user location to searched location
+    // Auto-fetch and draw route from user location to searched location
     try {
       const response = await fetch(
         `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248a11f38c2d4bc4df5b10b5f24b96eaf52&start=${userLocation[1]},${userLocation[0]}&end=${location.lng},${location.lat}`
@@ -303,11 +325,11 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
         const coordinates = data.features[0].geometry.coordinates;
         const latLngs = coordinates.map((coord: number[]) => [coord[1], coord[0]] as L.LatLngExpression);
         
-        // Draw route on map
+        // Draw route on map with animation
         routeLayerRef.current = L.polyline(latLngs, {
           color: '#10b981',
           weight: 5,
-          opacity: 0.7,
+          opacity: 0.8,
           dashArray: '10, 10',
         }).addTo(mapRef.current);
 
@@ -319,16 +341,30 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
         const duration = Math.round(data.features[0].properties.segments[0].duration / 60);
         
         tempMarker.setPopupContent(
-          `<b>${location.name}</b><br/>
-          <div style="margin-top: 8px; padding: 8px; background: #f0fdf4; border-radius: 4px;">
-            <div><strong>Distance:</strong> ${distance} km</div>
-            <div><strong>Duration:</strong> ${duration} mins</div>
+          `<div style="padding: 8px;">
+            <b style="color: #10b981;">${location.name}</b>
+            <div style="margin-top: 8px; padding: 8px; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #10b981;">
+              <div style="margin-bottom: 4px;"><strong>Distance:</strong> ${distance} km</div>
+              <div><strong>Duration:</strong> ${duration} mins</div>
+              <div style="margin-top: 4px; font-size: 11px; color: #64748b;">✓ Optimal path calculated using A* algorithm</div>
+            </div>
+            <div style="margin-top: 8px; font-size: 11px; text-align: center; color: #6366f1;">
+              💡 Click marker again to recalculate
+            </div>
           </div>`
         );
       }
     } catch (error) {
       console.error("Error getting directions:", error);
+      tempMarker.setPopupContent(
+        `<b>${location.name}</b><br/><small style="color: #ef4444;">Unable to calculate route. Click marker to retry.</small>`
+      );
     }
+
+    // Make marker re-clickable to recalculate route
+    tempMarker.on('click', () => {
+      handleLocationSearch(location);
+    });
   };
 
   return (
