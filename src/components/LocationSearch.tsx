@@ -130,24 +130,35 @@ const LocationSearch = ({ onLocationSelect, placeholder = "Search location...", 
       </div>
 
       {showResults && results.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-background border rounded-lg shadow-lg max-h-80 overflow-y-auto">
           {results.map((result: any) => (
             <button
               key={result.place_id}
               type="button"
               onClick={() => handleSelectLocation(result)}
-              className="w-full px-4 py-3 text-left hover:bg-muted transition-colors flex items-start gap-2 border-b last:border-b-0"
+              className="w-full px-4 py-3 text-left hover:bg-accent transition-all border-b last:border-b-0 hover:shadow-sm group"
             >
-              <MapPin className="h-4 w-4 mt-1 text-primary flex-shrink-0" />
-              <div className="flex-1">
-                <span className="text-sm block">{result.display_name}</span>
-                {result.distance && (
-                  <span className="text-xs text-muted-foreground">
-                    {result.distance < 1 
-                      ? `${(result.distance * 1000).toFixed(0)}m away`
-                      : `${result.distance.toFixed(1)}km away`}
-                  </span>
-                )}
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 group-hover:bg-primary/20 flex items-center justify-center flex-shrink-0 transition-colors">
+                  <MapPin className="h-4 w-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm text-foreground mb-0.5 truncate">
+                    {result.display_name.split(',')[0]}
+                  </div>
+                  <div className="text-xs text-muted-foreground line-clamp-1 mb-1.5">
+                    {result.display_name}
+                  </div>
+                  {result.distance && (
+                    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 rounded-full">
+                      <span className="text-xs font-medium text-primary">
+                        📍 {result.distance < 1 
+                          ? `${(result.distance * 1000).toFixed(0)}m away`
+                          : `${result.distance.toFixed(1)}km away`}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </button>
           ))}

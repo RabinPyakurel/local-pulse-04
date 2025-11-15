@@ -78,35 +78,56 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       .addTo(map)
       .bindPopup("<b>Your Location</b>");
 
-    // Custom icon for events - Red marker for better visibility
-    const customIcon = L.divIcon({
-      className: 'event-marker',
-      html: `
-        <div style="position: relative;">
+    // Create event markers with event images
+    const createEventMarker = (event: Event) => {
+      return L.divIcon({
+        className: 'event-image-marker',
+        html: `
           <div style="
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            width: 32px;
-            height: 32px;
-            border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg);
-            border: 3px solid white;
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
-          "></div>
-          <div style="
-            position: absolute;
-            top: 6px;
-            left: 6px;
-            background: white;
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-          "></div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      popupAnchor: [0, -32],
-    });
+            position: relative;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+          ">
+            <div style="
+              width: 100%;
+              height: 100%;
+              border-radius: 12px;
+              overflow: hidden;
+              border: 3px solid white;
+              background: white;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            ">
+              <img 
+                src="${event.image}" 
+                alt="${event.title}"
+                style="
+                  width: 100%;
+                  height: 100%;
+                  object-fit: cover;
+                "
+              />
+            </div>
+            <div style="
+              position: absolute;
+              bottom: -8px;
+              left: 50%;
+              transform: translateX(-50%);
+              width: 0;
+              height: 0;
+              border-left: 8px solid transparent;
+              border-right: 8px solid transparent;
+              border-top: 8px solid white;
+              filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+            "></div>
+          </div>
+        `,
+        iconSize: [50, 58],
+        iconAnchor: [25, 58],
+        popupAnchor: [0, -58],
+      });
+    };
 
     // Clear previous markers
     markersRef.current.forEach(marker => map.removeLayer(marker));
@@ -114,7 +135,8 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
 
     // Add markers for each event with click-to-route functionality
     events.forEach((event) => {
-      const marker = L.marker([event.lat, event.lng], { icon: customIcon }).addTo(map);
+      const eventIcon = createEventMarker(event);
+      const marker = L.marker([event.lat, event.lng], { icon: eventIcon }).addTo(map);
       markersRef.current.push(marker);
 
       // Create popup content
@@ -134,40 +156,60 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
         }
 
         try {
-          // Using OpenRouteService API (free, open-source)
+          // Using OSRM API (free, no API key needed, more reliable)
           const response = await fetch(
-            `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248a11f38c2d4bc4df5b10b5f24b96eaf52&start=${userLocation[1]},${userLocation[0]}&end=${event.lng},${event.lat}`
+            `https://router.project-osrm.org/route/v1/driving/${userLocation[1]},${userLocation[0]};${event.lng},${event.lat}?overview=full&geometries=geojson`
           );
+          
+          if (!response.ok) {
+            throw new Error(`Routing failed: ${response.status}`);
+          }
+          
           const data = await response.json();
           
-          if (data.features && data.features[0]) {
-            const coordinates = data.features[0].geometry.coordinates;
+          if (data.routes && data.routes[0]) {
+            const coordinates = data.routes[0].geometry.coordinates;
             const latLngs = coordinates.map((coord: number[]) => [coord[1], coord[0]] as L.LatLngExpression);
             
-            // Draw route on map
+            // Draw route on map with animation
             routeLayerRef.current = L.polyline(latLngs, {
               color: '#6366f1',
-              weight: 4,
+              weight: 5,
               opacity: 0.8,
+              dashArray: '8, 12',
+              lineCap: 'round',
             }).addTo(map);
 
             // Fit map to show entire route
-            map.fitBounds(routeLayerRef.current.getBounds(), { padding: [50, 50] });
+            map.fitBounds(routeLayerRef.current.getBounds(), { padding: [80, 80] });
 
             // Show distance and duration
-            const distance = (data.features[0].properties.segments[0].distance / 1000).toFixed(1);
-            const duration = Math.round(data.features[0].properties.segments[0].duration / 60);
+            const distance = (data.routes[0].distance / 1000).toFixed(1);
+            const duration = Math.round(data.routes[0].duration / 60);
             
             if (showInPopup) {
               L.popup()
                 .setLatLng([event.lat, event.lng])
                 .setContent(`
-                  <div style="padding: 8px;">
-                    <b style="color: #6366f1;">Route to ${event.title}</b>
-                    <div style="margin-top: 8px; padding: 8px; background: #f0f9ff; border-radius: 4px; border-left: 3px solid #6366f1;">
-                      <div style="margin-bottom: 4px;"><strong>Distance:</strong> ${distance} km</div>
-                      <div><strong>Duration:</strong> ${duration} mins</div>
-                      <div style="margin-top: 4px; font-size: 11px; color: #64748b;">Using A* pathfinding algorithm</div>
+                  <div style="padding: 12px; min-width: 200px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                      <div style="width: 40px; height: 40px; border-radius: 8px; overflow: hidden;">
+                        <img src="${event.image}" alt="${event.title}" style="width: 100%; height: 100%; object-fit: cover;" />
+                      </div>
+                      <b style="color: #6366f1; flex: 1;">${event.title}</b>
+                    </div>
+                    <div style="padding: 10px; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 8px; border-left: 3px solid #6366f1;">
+                      <div style="margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 16px;">📍</span>
+                        <strong>Distance:</strong> ${distance} km
+                      </div>
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 16px;">⏱️</span>
+                        <strong>Duration:</strong> ${duration} mins
+                      </div>
+                      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #bae6fd; font-size: 11px; color: #0369a1;">
+                        ✓ Optimal route via OSRM (A* algorithm)
+                      </div>
                     </div>
                   </div>
                 `)
@@ -177,7 +219,17 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
         } catch (error) {
           console.error("Error getting directions:", error);
           if (showInPopup) {
-            alert("Unable to get directions. Please try again.");
+            L.popup()
+              .setLatLng([event.lat, event.lng])
+              .setContent(`
+                <div style="padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #ef4444;">
+                  <b style="color: #dc2626;">Route Calculation Failed</b>
+                  <p style="margin: 8px 0 0 0; font-size: 12px; color: #991b1b;">
+                    Unable to calculate route. Please check your internet connection and try again.
+                  </p>
+                </div>
+              `)
+              .openOn(map);
           }
         }
       };
@@ -314,15 +366,20 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
       .bindPopup(`<b>${location.name}</b><br/><small>⏳ Calculating optimal route using A* algorithm...</small>`)
       .openPopup();
 
-    // Auto-fetch and draw route from user location to searched location
+    // Auto-fetch and draw route from user location to searched location using OSRM
     try {
       const response = await fetch(
-        `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248a11f38c2d4bc4df5b10b5f24b96eaf52&start=${userLocation[1]},${userLocation[0]}&end=${location.lng},${location.lat}`
+        `https://router.project-osrm.org/route/v1/driving/${userLocation[1]},${userLocation[0]};${location.lng},${location.lat}?overview=full&geometries=geojson`
       );
+      
+      if (!response.ok) {
+        throw new Error(`Routing failed: ${response.status}`);
+      }
+      
       const data = await response.json();
       
-      if (data.features && data.features[0]) {
-        const coordinates = data.features[0].geometry.coordinates;
+      if (data.routes && data.routes[0]) {
+        const coordinates = data.routes[0].geometry.coordinates;
         const latLngs = coordinates.map((coord: number[]) => [coord[1], coord[0]] as L.LatLngExpression);
         
         // Draw route on map with animation
@@ -330,26 +387,35 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
           color: '#10b981',
           weight: 5,
           opacity: 0.8,
-          dashArray: '10, 10',
+          dashArray: '10, 15',
+          lineCap: 'round',
         }).addTo(mapRef.current);
 
         // Fit map to show entire route
-        mapRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [50, 50] });
+        mapRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [80, 80] });
 
         // Show distance and duration in popup
-        const distance = (data.features[0].properties.segments[0].distance / 1000).toFixed(1);
-        const duration = Math.round(data.features[0].properties.segments[0].duration / 60);
+        const distance = (data.routes[0].distance / 1000).toFixed(1);
+        const duration = Math.round(data.routes[0].duration / 60);
         
         tempMarker.setPopupContent(
-          `<div style="padding: 8px;">
-            <b style="color: #10b981;">${location.name}</b>
-            <div style="margin-top: 8px; padding: 8px; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #10b981;">
-              <div style="margin-bottom: 4px;"><strong>Distance:</strong> ${distance} km</div>
-              <div><strong>Duration:</strong> ${duration} mins</div>
-              <div style="margin-top: 4px; font-size: 11px; color: #64748b;">✓ Optimal path calculated using A* algorithm</div>
+          `<div style="padding: 12px; min-width: 220px;">
+            <b style="color: #10b981; font-size: 14px;">${location.name}</b>
+            <div style="margin-top: 10px; padding: 10px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 8px; border-left: 3px solid #10b981;">
+              <div style="margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 16px;">📍</span>
+                <strong>Distance:</strong> ${distance} km
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 16px;">⏱️</span>
+                <strong>Duration:</strong> ${duration} mins
+              </div>
+              <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #bbf7d0; font-size: 11px; color: #166534;">
+                ✓ Best route via OSRM (A* algorithm)
+              </div>
             </div>
-            <div style="margin-top: 8px; font-size: 11px; text-align: center; color: #6366f1;">
-              💡 Click marker again to recalculate
+            <div style="margin-top: 10px; padding: 6px; background: #eff6ff; border-radius: 4px; text-align: center; font-size: 11px; color: #1e40af;">
+              💡 Click marker to recalculate route
             </div>
           </div>`
         );
@@ -357,7 +423,12 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
     } catch (error) {
       console.error("Error getting directions:", error);
       tempMarker.setPopupContent(
-        `<b>${location.name}</b><br/><small style="color: #ef4444;">Unable to calculate route. Click marker to retry.</small>`
+        `<div style="padding: 12px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #ef4444;">
+          <b style="color: #dc2626;">${location.name}</b>
+          <p style="margin: 8px 0 0 0; font-size: 12px; color: #991b1b;">
+            Unable to calculate route. Please check your connection and click marker to retry.
+          </p>
+        </div>`
       );
     }
 
