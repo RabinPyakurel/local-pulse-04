@@ -23,7 +23,7 @@ const Navigation = () => {
               <MapPin className="h-5 w-5 text-white" />
             </div>
             <span className="font-bold text-xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              EventHub
+              Local event finder
             </span>
           </Link>
 
