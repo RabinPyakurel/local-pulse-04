@@ -43,13 +43,13 @@ const EventMap = ({ events, userInterests, onInterestToggle, onAttendedToggle }:
         },
         (error) => {
           console.log("Geolocation error:", error);
-          // Fallback to default location (New York)
-          setUserLocation([40.7589, -73.9851]);
+          // Fallback to default location (Chabahil, Kathmandu)
+          setUserLocation([27.7172, 85.3240]);
         }
       );
     } else {
-      // Fallback to default location
-      setUserLocation([40.7589, -73.9851]);
+      // Fallback to default location (Chabahil, Kathmandu)
+      setUserLocation([27.7172, 85.3240]);
     }
   }, []);
 
